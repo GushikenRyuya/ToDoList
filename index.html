@@ -2,7 +2,13 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f2f5f8" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#141a26" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="ふたりのタスク">
+<meta name="format-detection" content="telephone=no">
 <title>ふたりのタスク</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -18,75 +24,84 @@
     --accent:#3cb8ba; --accent-ink:#0c1a1b; --danger:#ef7b71; --done:#667089;
   }
 }
-*{box-sizing:border-box}
+*{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
 html{-webkit-text-size-adjust:100%}
 body{
   margin:0; background:var(--bg); color:var(--ink);
   font-family:"Zen Maru Gothic","Hiragino Maru Gothic ProN","Hiragino Sans","Yu Gothic",sans-serif;
-  line-height:1.6; padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+  font-size:16px; line-height:1.55;
+  padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
 }
-.wrap{max-width:720px; margin:0 auto; padding:20px 16px 80px}
-header{display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:20px}
-h1{font-size:1.5rem; margin:0; letter-spacing:.02em}
+body.sorting{user-select:none; -webkit-user-select:none}
+.wrap{max-width:640px; margin:0 auto; padding:14px 12px 96px}
+header{display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:14px}
+h1{font-size:1.3rem; margin:0; letter-spacing:.02em}
 .status{font-size:.8rem; color:var(--sub); display:flex; align-items:center; gap:6px}
 .dot{width:8px; height:8px; border-radius:50%; background:var(--done)}
 .dot.on{background:var(--accent)}
-button{font:inherit; color:inherit; cursor:pointer}
+button{font:inherit; color:inherit; cursor:pointer; touch-action:manipulation}
 :focus-visible{outline:2px solid var(--accent); outline-offset:2px}
-.btn{border:1px solid var(--line); background:var(--surface); border-radius:10px; padding:8px 14px}
-.btn:hover{border-color:var(--accent)}
-.btn.primary{background:var(--accent); color:var(--accent-ink); border-color:var(--accent); font-weight:700}
-.btn.ghost{border:none; background:none; color:var(--sub); padding:6px 8px}
-.btn.ghost:hover{color:var(--danger)}
 
-.add-list{display:flex; gap:8px; margin-bottom:28px}
-.add-list input{flex:1}
+.btn{border:1px solid var(--line); background:var(--surface); border-radius:12px; min-height:44px; padding:0 16px}
+.btn.primary{background:var(--accent); color:var(--accent-ink); border-color:var(--accent); font-weight:700}
+.btn.ghost{border:none; background:none; color:var(--sub); min-width:44px; padding:0 8px}
+.btn:active{filter:brightness(.93)}
+@media (hover:hover){ .btn:hover{border-color:var(--accent)} .btn.ghost:hover{color:var(--danger)} }
+
 input[type=text], textarea{
-  font:inherit; color:inherit; background:var(--surface);
-  border:1px solid var(--line); border-radius:10px; padding:9px 12px; width:100%;
+  font:inherit; font-size:16px; color:inherit; background:var(--surface);
+  border:1px solid var(--line); border-radius:12px; padding:10px 12px; width:100%; min-height:44px;
 }
 input[type=text]:focus, textarea:focus{outline:2px solid var(--accent); outline-offset:0; border-color:var(--accent)}
 
-.list{margin-bottom:32px; padding-left:16px; border-left:4px solid var(--accent)}
-.list-head{display:flex; align-items:center; gap:8px; margin-bottom:10px}
-.list-title{
-  flex:1; font-size:1.15rem; font-weight:700; background:transparent; border:1px solid transparent;
-  padding:4px 8px; margin-left:-8px;
-}
-.list-title:hover{border-color:var(--line)}
-.count{font-size:.85rem; color:var(--sub); white-space:nowrap}
+.add-list{display:flex; gap:8px; margin-bottom:22px}
+.add-list input{flex:1; min-width:0}
 
-.task{display:grid; grid-template-columns:28px 1fr 32px; gap:2px 8px; align-items:start;
-  padding:10px 0; border-bottom:1px solid var(--line)}
+.list{margin-bottom:28px; padding-left:10px; border-left:4px solid var(--accent)}
+.list-head{display:flex; align-items:center; gap:4px; margin-bottom:4px}
+.list-title{
+  flex:1; min-width:0; font-size:1.15rem; font-weight:700; background:transparent;
+  border:1px solid transparent; padding:6px 8px; margin-left:-8px;
+}
+.count{font-size:.8rem; color:var(--sub); white-space:nowrap}
+
+.task{display:grid; grid-template-columns:34px 30px 1fr 44px; column-gap:2px; align-items:start;
+  padding:4px 0; border-bottom:1px solid var(--line); background:var(--bg)}
+.handle{
+  grid-column:1; grid-row:1; height:44px; display:flex; align-items:center; justify-content:center;
+  color:var(--sub); font-size:22px; line-height:1; touch-action:none; cursor:grab; user-select:none; -webkit-user-select:none;
+}
 .task input[type=checkbox]{
-  appearance:none; -webkit-appearance:none; width:22px; height:22px; margin:5px 0 0;
-  border:2px solid var(--sub); border-radius:7px; background:var(--surface); cursor:pointer; position:relative;
+  grid-column:2; grid-row:1;
+  appearance:none; -webkit-appearance:none; width:26px; height:26px; margin:9px 0 0;
+  border:2px solid var(--sub); border-radius:8px; background:var(--surface); cursor:pointer; position:relative;
 }
 .task input[type=checkbox]:checked{background:var(--accent); border-color:var(--accent)}
 .task input[type=checkbox]:checked::after{
-  content:""; position:absolute; left:6px; top:2px; width:5px; height:10px;
-  border:solid var(--accent-ink); border-width:0 2.5px 2.5px 0; transform:rotate(45deg);
+  content:""; position:absolute; left:7px; top:2px; width:6px; height:12px;
+  border:solid var(--accent-ink); border-width:0 3px 3px 0; transform:rotate(45deg);
 }
-.task .text{background:transparent; border-color:transparent; font-weight:500; padding:5px 8px}
-.task .text:hover{border-color:var(--line); background:var(--surface)}
+.task .text{grid-column:3; grid-row:1; background:transparent; border-color:transparent; font-weight:500; padding:10px 8px}
 .task .note{
-  grid-column:2; background:transparent; border-color:transparent; color:var(--sub);
-  font-size:.85rem; padding:3px 8px; resize:none; overflow:hidden; min-height:30px;
+  grid-column:3 / 5; grid-row:2; background:transparent; border-color:transparent; color:var(--sub);
+  padding:6px 8px; margin-bottom:4px; resize:none; overflow:hidden; min-height:38px;
 }
-.task .note:hover{border-color:var(--line); background:var(--surface)}
+.task .text::placeholder, .task .note::placeholder{color:var(--done)}
+.task .del{grid-column:4; grid-row:1}
 .task.done .text{color:var(--done); text-decoration:line-through}
 .task.done .note{color:var(--done)}
-.task .del{grid-column:3; grid-row:1}
+.task.dragging{background:var(--surface); box-shadow:0 8px 22px rgba(0,0,0,.22); border-radius:12px; position:relative; z-index:2}
+@media (hover:hover){ .task .text:hover, .task .note:hover, .list-title:hover{border-color:var(--line); background:var(--surface)} }
 
-.add-task{display:flex; gap:8px; margin-top:12px}
-.empty{color:var(--sub); text-align:center; padding:40px 0}
+.add-task{display:flex; gap:8px; margin-top:10px}
+.add-task input{flex:1; min-width:0}
+.empty{color:var(--sub); text-align:center; padding:40px 8px}
 
 .gate{max-width:420px; margin:12vh auto 0; padding:0 20px}
 .gate p{color:var(--sub); font-size:.9rem}
-.gate .row{display:flex; gap:8px; margin-top:12px}
-.err{color:var(--danger); font-size:.9rem; margin-top:10px}
-.toast{position:fixed; left:50%; bottom:24px; transform:translateX(-50%); background:var(--ink); color:var(--bg);
-  padding:8px 16px; border-radius:20px; font-size:.85rem; opacity:0; pointer-events:none; transition:opacity .2s}
+.err{color:var(--danger); font-size:.9rem; margin-top:10px; word-break:break-all}
+.toast{position:fixed; left:50%; bottom:calc(24px + env(safe-area-inset-bottom)); transform:translateX(-50%); background:var(--ink); color:var(--bg);
+  padding:10px 18px; border-radius:22px; font-size:.9rem; opacity:0; pointer-events:none; transition:opacity .2s; max-width:90vw}
 .toast.show{opacity:1}
 @media (prefers-reduced-motion: reduce){ .toast{transition:none} }
 </style>
@@ -119,7 +134,7 @@ const root = document.getElementById("root");
 const toastEl = document.getElementById("toast");
 
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2));
-function toast(msg){ toastEl.textContent = msg; toastEl.classList.add("show"); setTimeout(()=>toastEl.classList.remove("show"), 1800); }
+function toast(msg){ toastEl.textContent = msg; toastEl.classList.add("show"); setTimeout(()=>toastEl.classList.remove("show"), 2200); }
 function el(tag, props = {}, ...kids){
   const e = document.createElement(tag);
   for (const [k, v] of Object.entries(props)){
@@ -136,7 +151,7 @@ function el(tag, props = {}, ...kids){
 if (!firebaseConfig || String(firebaseConfig.apiKey).startsWith("YOUR_")){
   root.append(el("div", {class:"gate"},
     el("h1", {}, "設定がまだです"),
-    el("p", {}, "firebase-config.js に Firebase の設定を貼り付けてください。手順は README.md にあります.")));
+    el("p", {}, "firebase-config.js に Firebase の設定を貼り付けてください。手順は README.md にあります。")));
   throw new Error("firebase-config.js is not configured");
 }
 
@@ -153,6 +168,7 @@ let lists = [];
 let online = false;
 let loaded = false;
 let pendingRender = false;
+let dragging = false;
 
 async function mutateTasks(listId, fn){
   try{
@@ -172,6 +188,12 @@ const removeList = id => deleteDoc(listRef(id));
 const addTask = (listId, text) => mutateTasks(listId, t => [...t, { id: uid(), done:false, text, note:"" }]);
 const patchTask = (listId, taskId, patch) => mutateTasks(listId, t => t.map(x => x.id === taskId ? { ...x, ...patch } : x));
 const removeTask = (listId, taskId) => mutateTasks(listId, t => t.filter(x => x.id !== taskId));
+const reorderTasks = (listId, order) => mutateTasks(listId, tasks => {
+  const map = new Map(tasks.map(t => [t.id, t]));
+  const out = order.map(id => map.get(id)).filter(Boolean);
+  for (const t of tasks) if (!order.includes(t.id)) out.push(t); // 同時に追加されたタスクは末尾へ
+  return out;
+});
 
 render();
 
@@ -186,18 +208,58 @@ onSnapshot(listsCol, snap => {
     el("p", {}, "Firestore のルール設定か、firebase-config.js を確認してください。"), el("div", {class:"err"}, String(err.message))));
 });
 
+// ---- 並べ替え(ハンドルをドラッグ) ----
+function autoScroll(y){
+  const m = 90;
+  if (y < m) window.scrollBy(0, -14);
+  else if (y > window.innerHeight - m) window.scrollBy(0, 14);
+}
+function enableSort(handle, row, box, listId){
+  handle.addEventListener("pointerdown", e => {
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    e.preventDefault();
+    dragging = true;
+    document.body.classList.add("sorting");
+    row.classList.add("dragging");
+    try{ handle.setPointerCapture(e.pointerId); }catch{}
+    const before = [...box.children].map(r => r.dataset.id).join();
+
+    const onMove = ev => {
+      autoScroll(ev.clientY);
+      const others = [...box.children].filter(r => r !== row);
+      const next = others.find(r => { const b = r.getBoundingClientRect(); return ev.clientY < b.top + b.height / 2; });
+      if (next){ if (row.nextElementSibling !== next) box.insertBefore(row, next); }
+      else if (box.lastElementChild !== row) box.append(row);
+    };
+    const onEnd = () => {
+      handle.removeEventListener("pointermove", onMove);
+      handle.removeEventListener("pointerup", onEnd);
+      handle.removeEventListener("pointercancel", onEnd);
+      dragging = false;
+      document.body.classList.remove("sorting");
+      row.classList.remove("dragging");
+      const order = [...box.children].map(r => r.dataset.id);
+      if (order.join() === before){ if (pendingRender) render(); return; }
+      reorderTasks(listId, order);
+    };
+    handle.addEventListener("pointermove", onMove);
+    handle.addEventListener("pointerup", onEnd);
+    handle.addEventListener("pointercancel", onEnd);
+  });
+}
+
 // ---- 描画 ----
 function isEditing(){
   const a = document.activeElement;
   if (!a || !root.contains(a) || a.dataset.addFor) return false;
   return (a.tagName === "INPUT" && a.type === "text") || a.tagName === "TEXTAREA";
 }
-root.addEventListener("focusout", () => { setTimeout(() => { if (pendingRender && !isEditing()) render(); }, 0); });
+root.addEventListener("focusout", () => { setTimeout(() => { if (pendingRender && !isEditing() && !dragging) render(); }, 0); });
 
 function autosize(t){ t.style.height = "auto"; t.style.height = t.scrollHeight + 2 + "px"; }
 
 function render(){
-  if (isEditing()){ pendingRender = true; return; }
+  if (dragging || isEditing()){ pendingRender = true; return; }
   pendingRender = false;
 
   // 追加欄は入力中の文字とフォーカスを描画後も引き継ぐ
@@ -205,7 +267,7 @@ function render(){
   const keep = act && act.dataset && act.dataset.addFor
     ? { id: act.dataset.addFor, value: act.value } : null;
 
-  const newTitle = el("input", {type:"text", "data-add-for":"__new", placeholder:"新しいリスト名(例: 買い物、旅行の準備)"});
+  const newTitle = el("input", {type:"text", "data-add-for":"__new", enterkeyhint:"done", placeholder:"新しいリスト名(例: 買い物)"});
   const submitList = () => { const v = newTitle.value.trim(); if (!v) return; addList(v); newTitle.value = ""; };
   newTitle.addEventListener("keydown", e => { if (e.key === "Enter" && !e.isComposing) submitList(); });
 
@@ -215,7 +277,7 @@ function render(){
       el("div", {class:"status"},
         el("span", {class:"dot" + (online ? " on" : "")}),
         online ? "同期中" : "接続中…")),
-    el("div", {class:"add-list"}, newTitle, el("button", {class:"btn primary", onclick:submitList}, "リストを追加")));
+    el("div", {class:"add-list"}, newTitle, el("button", {class:"btn primary", onclick:submitList}, "リスト追加")));
 
   if (!loaded) wrap.append(el("div", {class:"empty"}, "読み込み中…(10秒以上続く場合は Firestore の設定を確認してください)"));
   else if (!lists.length) wrap.append(el("div", {class:"empty"}, "まだリストがありません。上の欄からひとつ作ってみましょう。"));
@@ -230,12 +292,15 @@ function render(){
 
     const section = el("section", {class:"list"},
       el("div", {class:"list-head"}, title,
-        el("span", {class:"count"}, `${doneN} / ${tasks.length} 完了`),
-        el("button", {class:"btn ghost", title:"リストを削除", onclick: () => {
+        el("span", {class:"count"}, `${doneN}/${tasks.length}`),
+        el("button", {class:"btn ghost", "aria-label":"リストを削除", onclick: () => {
           if (confirm(`「${l.title}」とその中のタスクをすべて削除しますか?`)) removeList(l.id);
         }}, "削除")));
 
+    const box = el("div", {class:"tasks"});
     for (const t of tasks){
+      const handle = el("div", {class:"handle", role:"button", "aria-label":"ドラッグして並べ替え", title:"ドラッグして並べ替え"}, "≡");
+
       const cb = el("input", {type:"checkbox", checked:!!t.done, "aria-label":"完了"});
       cb.addEventListener("change", () => patchTask(l.id, t.id, { done: cb.checked }));
 
@@ -248,12 +313,18 @@ function render(){
       note.addEventListener("input", () => autosize(note));
       note.addEventListener("change", () => patchTask(l.id, t.id, { note: note.value }));
 
-      const del = el("button", {class:"btn ghost del", title:"タスクを削除", "aria-label":"タスクを削除", onclick: () => removeTask(l.id, t.id)}, "✕");
-      section.append(el("div", {class:"task" + (t.done ? " done" : "")}, cb, text, del, note));
+      const del = el("button", {class:"btn ghost del", "aria-label":"タスクを削除", onclick: () => {
+        if (confirm("このタスクを削除しますか?")) removeTask(l.id, t.id);
+      }}, "✕");
+
+      const row = el("div", {class:"task" + (t.done ? " done" : ""), "data-id":t.id}, handle, cb, text, del, note);
+      enableSort(handle, row, box, l.id);
+      box.append(row);
       queueMicrotask(() => autosize(note));
     }
+    section.append(box);
 
-    const addInput = el("input", {type:"text", "data-add-for":l.id, placeholder:"タスクを追加"});
+    const addInput = el("input", {type:"text", "data-add-for":l.id, enterkeyhint:"done", placeholder:"タスクを追加"});
     const submitTask = () => { const v = addInput.value.trim(); if (!v) return; addTask(l.id, v); addInput.value = ""; };
     addInput.addEventListener("keydown", e => { if (e.key === "Enter" && !e.isComposing) submitTask(); });
     section.append(el("div", {class:"add-task"}, addInput, el("button", {class:"btn", onclick:submitTask}, "追加")));
