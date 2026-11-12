@@ -95,6 +95,19 @@ input[type=text]:focus, textarea:focus{outline:2px solid var(--accent); outline-
 <div id="root"></div>
 <div class="toast" id="toast" role="status"></div>
 
+<script>
+(function(){
+  function show(msg){
+    var r=document.getElementById("root");
+    if(r && !r.children.length){
+      r.innerHTML='<div class="gate"><h1>表示できませんでした</h1><p></p></div>';
+      r.querySelector("p").textContent=msg;
+    }
+  }
+  window.addEventListener("error",function(e){ setTimeout(function(){show("エラー: "+e.message+"(firebase-config.js が正しいか確認してください)")},0); });
+  setTimeout(function(){show("読み込みに失敗しました。firebase-config.js が配置され、正しい内容か確認してください。")},4000);
+})();
+</script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
@@ -138,6 +151,7 @@ const listRef = id => doc(db, "rooms", room, "lists", id);
 
 let lists = [];
 let online = false;
+let loaded = false;
 let pendingRender = false;
 
 async function mutateTasks(listId, fn){
@@ -159,7 +173,10 @@ const addTask = (listId, text) => mutateTasks(listId, t => [...t, { id: uid(), d
 const patchTask = (listId, taskId, patch) => mutateTasks(listId, t => t.map(x => x.id === taskId ? { ...x, ...patch } : x));
 const removeTask = (listId, taskId) => mutateTasks(listId, t => t.filter(x => x.id !== taskId));
 
+render();
+
 onSnapshot(listsCol, snap => {
+  loaded = true;
   online = !snap.metadata.fromCache;
   lists = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
   render();
@@ -200,9 +217,10 @@ function render(){
         online ? "同期中" : "接続中…")),
     el("div", {class:"add-list"}, newTitle, el("button", {class:"btn primary", onclick:submitList}, "リストを追加")));
 
-  if (!lists.length) wrap.append(el("div", {class:"empty"}, "まだリストがありません。上の欄からひとつ作ってみましょう。"));
+  if (!loaded) wrap.append(el("div", {class:"empty"}, "読み込み中…(10秒以上続く場合は Firestore の設定を確認してください)"));
+  else if (!lists.length) wrap.append(el("div", {class:"empty"}, "まだリストがありません。上の欄からひとつ作ってみましょう。"));
 
-  for (const l of lists){
+  for (const l of (loaded ? lists : [])){
     const tasks = l.tasks || [];
     const doneN = tasks.filter(t => t.done).length;
 
