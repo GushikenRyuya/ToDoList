@@ -58,7 +58,11 @@ input[type=text]:focus, textarea:focus{outline:2px solid var(--accent); outline-
 .add-list input{flex:1; min-width:0}
 
 .list{margin-bottom:28px; padding-left:10px; border-left:4px solid var(--accent)}
+.list.dragging{background:var(--surface); box-shadow:0 8px 22px rgba(0,0,0,.22); border-radius:0 12px 12px 0; position:relative; z-index:2}
+.sorting-lists .tasks, .sorting-lists .add-task{display:none}
+.sorting-lists .list{margin-bottom:10px}
 .list-head{display:flex; align-items:center; gap:4px; margin-bottom:4px}
+.list-head .handle{width:34px; flex:none; margin-left:-6px}
 .list-title{
   flex:1; min-width:0; font-size:1.15rem; font-weight:700; background:transparent;
   border:1px solid transparent; padding:6px 8px; margin-left:-8px;
@@ -126,7 +130,8 @@ input[type=text]:focus, textarea:focus{outline:2px solid var(--accent); outline-
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
-  getFirestore, collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc, runTransaction
+  getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
+  collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc, writeBatch, deleteField, FieldPath
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { firebaseConfig } from "./firebase-config.js";
 
@@ -160,7 +165,11 @@ const room = "main";
 
 // ---- Firestore ----
 const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+let db;
+try{
+  // 端末に保存して起動を速くし、通信が不安定でも入力できるようにする
+  db = initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) });
+}catch(e){ db = getFirestore(app); }
 const listsCol = collection(db, "rooms", room, "lists");
 const listRef = id => doc(db, "rooms", room, "lists", id);
 
@@ -169,38 +178,60 @@ let online = false;
 let loaded = false;
 let pendingRender = false;
 let dragging = false;
+const migrating = new Set();
 
-async function mutateTasks(listId, fn){
-  try{
-    await runTransaction(db, async tx => {
-      const snap = await tx.get(listRef(listId));
-      if (!snap.exists()) return;
-      tx.update(listRef(listId), { tasks: fn(snap.data().tasks || []) });
-    });
-  }catch(e){ console.error(e); toast("保存できませんでした。通信を確認してください"); }
+const tid = () => "t" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+const orderOf = l => typeof l.order === "number" ? l.order : (l.createdAt || 0);
+function normTasks(l){
+  const t = l.tasks;
+  if (!t) return [];
+  if (Array.isArray(t)) return t.map((x, i) => ({ ...x, id: x.id || ("old" + i), order: i }));
+  return Object.entries(t)
+    .filter(([, x]) => x && typeof x.text === "string" && typeof x.order === "number")
+    .map(([id, x]) => ({ id, ...x }))
+    .sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
 }
-const addList = async title => {
-  const id = uid();
-  await setDoc(listRef(id), { title, tasks: [], createdAt: Date.now() });
+const safe = p => Promise.resolve(p).catch(e => { console.error(e); toast("保存できませんでした。通信を確認してください"); });
+const tp = (taskId, f) => f ? new FieldPath("tasks", taskId, f) : new FieldPath("tasks", taskId);
+
+// 書き込みは端末側に即反映され(待ち時間なし)、あとから通信で同期される
+const addList = title => {
+  const order = lists.length ? Math.max(...lists.map(orderOf)) + 1 : 0;
+  return safe(setDoc(listRef(tid()), { title, tasks: {}, createdAt: Date.now(), order }));
 };
-const renameList = (id, title) => updateDoc(listRef(id), { title });
-const removeList = id => deleteDoc(listRef(id));
-const addTask = (listId, text) => mutateTasks(listId, t => [...t, { id: uid(), done:false, text, note:"" }]);
-const patchTask = (listId, taskId, patch) => mutateTasks(listId, t => t.map(x => x.id === taskId ? { ...x, ...patch } : x));
-const removeTask = (listId, taskId) => mutateTasks(listId, t => t.filter(x => x.id !== taskId));
-const reorderTasks = (listId, order) => mutateTasks(listId, tasks => {
-  const map = new Map(tasks.map(t => [t.id, t]));
-  const out = order.map(id => map.get(id)).filter(Boolean);
-  for (const t of tasks) if (!order.includes(t.id)) out.push(t); // 同時に追加されたタスクは末尾へ
-  return out;
-});
+const renameList = (id, title) => safe(updateDoc(listRef(id), { title }));
+const removeList = id => safe(deleteDoc(listRef(id)));
+const reorderLists = order => {
+  const batch = writeBatch(db);
+  order.forEach((id, i) => batch.update(listRef(id), { order: i }));
+  return safe(batch.commit());
+};
+const addTask = (listId, text) => {
+  const l = lists.find(x => x.id === listId);
+  const max = l ? Math.max(-1, ...normTasks(l).map(t => t.order)) : -1;
+  return safe(updateDoc(listRef(listId), tp(tid()), { text, note: "", done: false, order: max + 1 }));
+};
+const patchTask = (listId, taskId, patch) =>
+  safe(updateDoc(listRef(listId), ...Object.entries(patch).flatMap(([k, v]) => [tp(taskId, k), v])));
+const removeTask = (listId, taskId) => safe(updateDoc(listRef(listId), tp(taskId), deleteField()));
+const reorderTasks = (listId, order) =>
+  safe(updateDoc(listRef(listId), ...order.flatMap((id, i) => [tp(id, "order"), i])));
+
+// 旧形式(配列)のデータを新形式へ一度だけ変換
+function migrate(l){
+  const obj = {};
+  (l.tasks || []).forEach((t, i) => { obj[tid() + i] = { text: t.text || "", note: t.note || "", done: !!t.done, order: i }; });
+  safe(updateDoc(listRef(l.id), { tasks: obj }));
+}
 
 render();
 
 onSnapshot(listsCol, snap => {
+  if (snap.metadata.fromCache && snap.empty && !loaded){ online = false; render(); return; }
   loaded = true;
   online = !snap.metadata.fromCache;
-  lists = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+  lists = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => orderOf(a) - orderOf(b));
+  for (const l of lists) if (Array.isArray(l.tasks) && !migrating.has(l.id)){ migrating.add(l.id); migrate(l); }
   render();
 }, err => {
   console.error(err);
@@ -214,12 +245,18 @@ function autoScroll(y){
   if (y < m) window.scrollBy(0, -14);
   else if (y > window.innerHeight - m) window.scrollBy(0, 14);
 }
-function enableSort(handle, row, box, listId){
+function enableSort(handle, row, box, opts){
   handle.addEventListener("pointerdown", e => {
     if (e.pointerType === "mouse" && e.button !== 0) return;
     e.preventDefault();
     dragging = true;
     document.body.classList.add("sorting");
+    if (opts.collapse){
+      // リスト移動中は中身をたたんで、指の位置がずれないようスクロールを補正
+      const y0 = handle.getBoundingClientRect().top;
+      document.body.classList.add("sorting-lists");
+      window.scrollBy(0, handle.getBoundingClientRect().top - y0);
+    }
     row.classList.add("dragging");
     try{ handle.setPointerCapture(e.pointerId); }catch{}
     const before = [...box.children].map(r => r.dataset.id).join();
@@ -236,11 +273,11 @@ function enableSort(handle, row, box, listId){
       handle.removeEventListener("pointerup", onEnd);
       handle.removeEventListener("pointercancel", onEnd);
       dragging = false;
-      document.body.classList.remove("sorting");
+      document.body.classList.remove("sorting", "sorting-lists");
       row.classList.remove("dragging");
       const order = [...box.children].map(r => r.dataset.id);
       if (order.join() === before){ if (pendingRender) render(); return; }
-      reorderTasks(listId, order);
+      opts.commit(order);
     };
     handle.addEventListener("pointermove", onMove);
     handle.addEventListener("pointerup", onEnd);
@@ -266,6 +303,8 @@ function render(){
   const act = document.activeElement;
   const keep = act && act.dataset && act.dataset.addFor
     ? { id: act.dataset.addFor, value: act.value } : null;
+  const scrollY = window.scrollY;
+  const notes = [];
 
   const newTitle = el("input", {type:"text", "data-add-for":"__new", enterkeyhint:"done", placeholder:"新しいリスト名(例: 買い物)"});
   const submitList = () => { const v = newTitle.value.trim(); if (!v) return; addList(v); newTitle.value = ""; };
@@ -282,20 +321,24 @@ function render(){
   if (!loaded) wrap.append(el("div", {class:"empty"}, "読み込み中…(10秒以上続く場合は Firestore の設定を確認してください)"));
   else if (!lists.length) wrap.append(el("div", {class:"empty"}, "まだリストがありません。上の欄からひとつ作ってみましょう。"));
 
+  const listsBox = el("div", {class:"lists"});
   for (const l of (loaded ? lists : [])){
-    const tasks = l.tasks || [];
+    const tasks = normTasks(l);
     const doneN = tasks.filter(t => t.done).length;
+
+    const listHandle = el("div", {class:"handle", role:"button", "aria-label":"ドラッグしてリストを並べ替え", title:"ドラッグしてリストを並べ替え"}, "≡");
 
     const title = el("input", {type:"text", class:"list-title", value:l.title, "aria-label":"リスト名"});
     title.addEventListener("change", () => { const v = title.value.trim(); if (v) renameList(l.id, v); else title.value = l.title; });
     title.addEventListener("keydown", e => { if (e.key === "Enter" && !e.isComposing) title.blur(); });
 
-    const section = el("section", {class:"list"},
-      el("div", {class:"list-head"}, title,
+    const section = el("section", {class:"list", "data-id":l.id},
+      el("div", {class:"list-head"}, listHandle, title,
         el("span", {class:"count"}, `${doneN}/${tasks.length}`),
         el("button", {class:"btn ghost", "aria-label":"リストを削除", onclick: () => {
           if (confirm(`「${l.title}」とその中のタスクをすべて削除しますか?`)) removeList(l.id);
         }}, "削除")));
+    enableSort(listHandle, section, listsBox, { collapse:true, commit: reorderLists });
 
     const box = el("div", {class:"tasks"});
     for (const t of tasks){
@@ -312,15 +355,15 @@ function render(){
       note.value = t.note || "";
       note.addEventListener("input", () => autosize(note));
       note.addEventListener("change", () => patchTask(l.id, t.id, { note: note.value }));
+      notes.push(note);
 
       const del = el("button", {class:"btn ghost del", "aria-label":"タスクを削除", onclick: () => {
         if (confirm("このタスクを削除しますか?")) removeTask(l.id, t.id);
       }}, "✕");
 
       const row = el("div", {class:"task" + (t.done ? " done" : ""), "data-id":t.id}, handle, cb, text, del, note);
-      enableSort(handle, row, box, l.id);
+      enableSort(handle, row, box, { commit: order => reorderTasks(l.id, order) });
       box.append(row);
-      queueMicrotask(() => autosize(note));
     }
     section.append(box);
 
@@ -328,12 +371,16 @@ function render(){
     const submitTask = () => { const v = addInput.value.trim(); if (!v) return; addTask(l.id, v); addInput.value = ""; };
     addInput.addEventListener("keydown", e => { if (e.key === "Enter" && !e.isComposing) submitTask(); });
     section.append(el("div", {class:"add-task"}, addInput, el("button", {class:"btn", onclick:submitTask}, "追加")));
-    wrap.append(section);
+    listsBox.append(section);
   }
+  wrap.append(listsBox);
+
   root.replaceChildren(wrap);
+  notes.forEach(autosize);
+  window.scrollTo(0, scrollY);   // 再描画で画面が上に飛ばないようにする
   if (keep){
     const target = root.querySelector(`[data-add-for="${CSS.escape(keep.id)}"]`);
-    if (target){ target.value = keep.value; target.focus(); }
+    if (target){ target.value = keep.value; target.focus({ preventScroll:true }); }
   }
 }
 </script>
