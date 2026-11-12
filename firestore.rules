@@ -1,0 +1,9 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // このアプリが使う場所(rooms/main/lists)だけを読み書き可能にする
+    match /rooms/main/lists/{listId} {
+      allow read, write: if true;
+    }
+  }
+}

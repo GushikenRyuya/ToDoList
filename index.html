@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ふたりのタスク</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f2f5f8; --surface:#ffffff; --ink:#1b2438; --sub:#6b7488; --line:#dde3ec;
+  --accent:#0f8b8d; --accent-ink:#ffffff; --danger:#c8453b; --done:#a2abbb;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#141a26; --surface:#1d2536; --ink:#e8edf6; --sub:#939db3; --line:#2c3650;
+    --accent:#3cb8ba; --accent-ink:#0c1a1b; --danger:#ef7b71; --done:#667089;
+  }
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:"Zen Maru Gothic","Hiragino Maru Gothic ProN","Hiragino Sans","Yu Gothic",sans-serif;
+  line-height:1.6; padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+}
+.wrap{max-width:720px; margin:0 auto; padding:20px 16px 80px}
+header{display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:20px}
+h1{font-size:1.5rem; margin:0; letter-spacing:.02em}
+.status{font-size:.8rem; color:var(--sub); display:flex; align-items:center; gap:6px}
+.dot{width:8px; height:8px; border-radius:50%; background:var(--done)}
+.dot.on{background:var(--accent)}
+button{font:inherit; color:inherit; cursor:pointer}
+:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+.btn{border:1px solid var(--line); background:var(--surface); border-radius:10px; padding:8px 14px}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent); color:var(--accent-ink); border-color:var(--accent); font-weight:700}
+.btn.ghost{border:none; background:none; color:var(--sub); padding:6px 8px}
+.btn.ghost:hover{color:var(--danger)}
+
+.add-list{display:flex; gap:8px; margin-bottom:28px}
+.add-list input{flex:1}
+input[type=text], textarea{
+  font:inherit; color:inherit; background:var(--surface);
+  border:1px solid var(--line); border-radius:10px; padding:9px 12px; width:100%;
+}
+input[type=text]:focus, textarea:focus{outline:2px solid var(--accent); outline-offset:0; border-color:var(--accent)}
+
+.list{margin-bottom:32px; padding-left:16px; border-left:4px solid var(--accent)}
+.list-head{display:flex; align-items:center; gap:8px; margin-bottom:10px}
+.list-title{
+  flex:1; font-size:1.15rem; font-weight:700; background:transparent; border:1px solid transparent;
+  padding:4px 8px; margin-left:-8px;
+}
+.list-title:hover{border-color:var(--line)}
+.count{font-size:.85rem; color:var(--sub); white-space:nowrap}
+
+.task{display:grid; grid-template-columns:28px 1fr 32px; gap:2px 8px; align-items:start;
+  padding:10px 0; border-bottom:1px solid var(--line)}
+.task input[type=checkbox]{
+  appearance:none; -webkit-appearance:none; width:22px; height:22px; margin:5px 0 0;
+  border:2px solid var(--sub); border-radius:7px; background:var(--surface); cursor:pointer; position:relative;
+}
+.task input[type=checkbox]:checked{background:var(--accent); border-color:var(--accent)}
+.task input[type=checkbox]:checked::after{
+  content:""; position:absolute; left:6px; top:2px; width:5px; height:10px;
+  border:solid var(--accent-ink); border-width:0 2.5px 2.5px 0; transform:rotate(45deg);
+}
+.task .text{background:transparent; border-color:transparent; font-weight:500; padding:5px 8px}
+.task .text:hover{border-color:var(--line); background:var(--surface)}
+.task .note{
+  grid-column:2; background:transparent; border-color:transparent; color:var(--sub);
+  font-size:.85rem; padding:3px 8px; resize:none; overflow:hidden; min-height:30px;
+}
+.task .note:hover{border-color:var(--line); background:var(--surface)}
+.task.done .text{color:var(--done); text-decoration:line-through}
+.task.done .note{color:var(--done)}
+.task .del{grid-column:3; grid-row:1}
+
+.add-task{display:flex; gap:8px; margin-top:12px}
+.empty{color:var(--sub); text-align:center; padding:40px 0}
+
+.gate{max-width:420px; margin:12vh auto 0; padding:0 20px}
+.gate p{color:var(--sub); font-size:.9rem}
+.gate .row{display:flex; gap:8px; margin-top:12px}
+.err{color:var(--danger); font-size:.9rem; margin-top:10px}
+.toast{position:fixed; left:50%; bottom:24px; transform:translateX(-50%); background:var(--ink); color:var(--bg);
+  padding:8px 16px; border-radius:20px; font-size:.85rem; opacity:0; pointer-events:none; transition:opacity .2s}
+.toast.show{opacity:1}
+@media (prefers-reduced-motion: reduce){ .toast{transition:none} }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<div class="toast" id="toast" role="status"></div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import {
+  getFirestore, collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc, runTransaction
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { firebaseConfig } from "./firebase-config.js";
+
+const root = document.getElementById("root");
+const toastEl = document.getElementById("toast");
+
+const uid = () => (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2));
+function toast(msg){ toastEl.textContent = msg; toastEl.classList.add("show"); setTimeout(()=>toastEl.classList.remove("show"), 1800); }
+function el(tag, props = {}, ...kids){
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(props)){
+    if (k === "class") e.className = v;
+    else if (k.startsWith("on")) e.addEventListener(k.slice(2), v);
+    else if (k in e) e[k] = v;
+    else e.setAttribute(k, v);
+  }
+  for (const kid of kids) if (kid != null) e.append(kid);
+  return e;
+}
+
+// ---- 設定チェック ----
+if (!firebaseConfig || String(firebaseConfig.apiKey).startsWith("YOUR_")){
+  root.append(el("div", {class:"gate"},
+    el("h1", {}, "設定がまだです"),
+    el("p", {}, "firebase-config.js に Firebase の設定を貼り付けてください。手順は README.md にあります.")));
+  throw new Error("firebase-config.js is not configured");
+}
+
+// ---- 保存先(固定) ----
+const room = "main";
+
+// ---- Firestore ----
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const listsCol = collection(db, "rooms", room, "lists");
+const listRef = id => doc(db, "rooms", room, "lists", id);
+
+let lists = [];
+let online = false;
+let pendingRender = false;
+
+async function mutateTasks(listId, fn){
+  try{
+    await runTransaction(db, async tx => {
+      const snap = await tx.get(listRef(listId));
+      if (!snap.exists()) return;
+      tx.update(listRef(listId), { tasks: fn(snap.data().tasks || []) });
+    });
+  }catch(e){ console.error(e); toast("保存できませんでした。通信を確認してください"); }
+}
+const addList = async title => {
+  const id = uid();
+  await setDoc(listRef(id), { title, tasks: [], createdAt: Date.now() });
+};
+const renameList = (id, title) => updateDoc(listRef(id), { title });
+const removeList = id => deleteDoc(listRef(id));
+const addTask = (listId, text) => mutateTasks(listId, t => [...t, { id: uid(), done:false, text, note:"" }]);
+const patchTask = (listId, taskId, patch) => mutateTasks(listId, t => t.map(x => x.id === taskId ? { ...x, ...patch } : x));
+const removeTask = (listId, taskId) => mutateTasks(listId, t => t.filter(x => x.id !== taskId));
+
+onSnapshot(listsCol, snap => {
+  online = !snap.metadata.fromCache;
+  lists = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+  render();
+}, err => {
+  console.error(err);
+  root.replaceChildren(el("div", {class:"gate"}, el("h1", {}, "読み込めません"),
+    el("p", {}, "Firestore のルール設定か、firebase-config.js を確認してください。"), el("div", {class:"err"}, String(err.message))));
+});
+
+// ---- 描画 ----
+function isEditing(){
+  const a = document.activeElement;
+  if (!a || !root.contains(a) || a.dataset.addFor) return false;
+  return (a.tagName === "INPUT" && a.type === "text") || a.tagName === "TEXTAREA";
+}
+root.addEventListener("focusout", () => { setTimeout(() => { if (pendingRender && !isEditing()) render(); }, 0); });
+
+function autosize(t){ t.style.height = "auto"; t.style.height = t.scrollHeight + 2 + "px"; }
+
+function render(){
+  if (isEditing()){ pendingRender = true; return; }
+  pendingRender = false;
+
+  // 追加欄は入力中の文字とフォーカスを描画後も引き継ぐ
+  const act = document.activeElement;
+  const keep = act && act.dataset && act.dataset.addFor
+    ? { id: act.dataset.addFor, value: act.value } : null;
+
+  const newTitle = el("input", {type:"text", "data-add-for":"__new", placeholder:"新しいリスト名(例: 買い物、旅行の準備)"});
+  const submitList = () => { const v = newTitle.value.trim(); if (!v) return; addList(v); newTitle.value = ""; };
+  newTitle.addEventListener("keydown", e => { if (e.key === "Enter" && !e.isComposing) submitList(); });
+
+  const wrap = el("div", {class:"wrap"},
+    el("header", {},
+      el("h1", {}, "ふたりのタスク"),
+      el("div", {class:"status"},
+        el("span", {class:"dot" + (online ? " on" : "")}),
+        online ? "同期中" : "接続中…")),
+    el("div", {class:"add-list"}, newTitle, el("button", {class:"btn primary", onclick:submitList}, "リストを追加")));
+
+  if (!lists.length) wrap.append(el("div", {class:"empty"}, "まだリストがありません。上の欄からひとつ作ってみましょう。"));
+
+  for (const l of lists){
+    const tasks = l.tasks || [];
+    const doneN = tasks.filter(t => t.done).length;
+
+    const title = el("input", {type:"text", class:"list-title", value:l.title, "aria-label":"リスト名"});
+    title.addEventListener("change", () => { const v = title.value.trim(); if (v) renameList(l.id, v); else title.value = l.title; });
+    title.addEventListener("keydown", e => { if (e.key === "Enter" && !e.isComposing) title.blur(); });
+
+    const section = el("section", {class:"list"},
+      el("div", {class:"list-head"}, title,
+        el("span", {class:"count"}, `${doneN} / ${tasks.length} 完了`),
+        el("button", {class:"btn ghost", title:"リストを削除", onclick: () => {
+          if (confirm(`「${l.title}」とその中のタスクをすべて削除しますか?`)) removeList(l.id);
+        }}, "削除")));
+
+    for (const t of tasks){
+      const cb = el("input", {type:"checkbox", checked:!!t.done, "aria-label":"完了"});
+      cb.addEventListener("change", () => patchTask(l.id, t.id, { done: cb.checked }));
+
+      const text = el("input", {type:"text", class:"text", value:t.text, placeholder:"タスク内容", "aria-label":"タスク内容"});
+      text.addEventListener("change", () => patchTask(l.id, t.id, { text: text.value.trim() }));
+      text.addEventListener("keydown", e => { if (e.key === "Enter" && !e.isComposing) text.blur(); });
+
+      const note = el("textarea", {class:"note", rows:1, placeholder:"備考", "aria-label":"備考"});
+      note.value = t.note || "";
+      note.addEventListener("input", () => autosize(note));
+      note.addEventListener("change", () => patchTask(l.id, t.id, { note: note.value }));
+
+      const del = el("button", {class:"btn ghost del", title:"タスクを削除", "aria-label":"タスクを削除", onclick: () => removeTask(l.id, t.id)}, "✕");
+      section.append(el("div", {class:"task" + (t.done ? " done" : "")}, cb, text, del, note));
+      queueMicrotask(() => autosize(note));
+    }
+
+    const addInput = el("input", {type:"text", "data-add-for":l.id, placeholder:"タスクを追加"});
+    const submitTask = () => { const v = addInput.value.trim(); if (!v) return; addTask(l.id, v); addInput.value = ""; };
+    addInput.addEventListener("keydown", e => { if (e.key === "Enter" && !e.isComposing) submitTask(); });
+    section.append(el("div", {class:"add-task"}, addInput, el("button", {class:"btn", onclick:submitTask}, "追加")));
+    wrap.append(section);
+  }
+  root.replaceChildren(wrap);
+  if (keep){
+    const target = root.querySelector(`[data-add-for="${CSS.escape(keep.id)}"]`);
+    if (target){ target.value = keep.value; target.focus(); }
+  }
+}
+</script>
+</body>
+</html>
